@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta name="description" content="Webpage description goes here" />
+  <meta charset="utf-8">
+  <title>CTBL Parser</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="author" content="Joel Barba">
+  <style>
+    h1 { margin: 0 auto 20px; text-align: center; font-size: 2rem; }
+    section { 
+      padding: 10px 30px; 
+      display: flex;
+    }
+    .col-1, .col-2 {
+      flex: 1;
+      margin-right: 20px;
+    }
+    h2 { margin: 10px; }
+    #data-in-1, #data-in-2 { 
+      height: 100px;
+      margin-bottom: 15px;
+      width: 100%;
+    }
+    #result {
+      white-space: pre;
+      border: 1px solid;
+      padding: 10px;
+      background: #f1f1f1;
+      margin: 0 25px;
+    }
+    #parse-1-btn, #parse-2-btn, #clear-1-btn, #clear-2-btn, #copy-btn {
+      padding: 5px 20px;
+      margin-bottom: 10px;      
+    }
+    #clear-1-btn, #clear-2-btn {
+      background-color: red;
+    }
+    #copy-btn {
+      margin: 25px;
+    }
+  </style>
+</head>
+
+<body>
+  
+<div class="container">
+  <h1>JB-CTBL-Parser</h1>
+
+  <section>
+    <div class="col-1 pb-5">
+      <h2>5. BS</h2>
+      <textarea id="data-in-1"></textarea>
+      <button id="clear-1-btn">Clear</button>
+      <button id="parse-1-btn">Parse</button>
+    </div>
+    <div class="col-2 pb-5">
+      <h2>6. N26</h2>
+      <textarea id="data-in-2"></textarea>
+      <button id="clear-2-btn">Clear</button>
+      <button id="parse-2-btn">Parse</button>
+    </div>
+  </section>
+
+
+  <hr/>
+  <h2>Output:</h2>
+  <!-- <Button class="mb-5 ml-5" onclick={clearAll} variant="destructive">Clear All</Button> -->
+  <button id="parse-all-btn" style="padding: 5px 35px; margin: 0 25px 10px;">Parse All</button>
+  <pre id="result"></pre>
+  <button id="copy-btn">Copy to clipboard</button>
+</div>
+
+<script>
+  document.getElementById('parse-1-btn').addEventListener('click', parseBS);
+  document.getElementById('parse-2-btn').addEventListener('click', parseN26);
+  document.getElementById('parse-all-btn').addEventListener('click', parseAll);
+  document.getElementById('clear-1-btn').addEventListener('click', () => clearData('dataIn1'));
+  document.getElementById('clear-2-btn').addEventListener('click', () => clearData('dataIn2'));
+  document.getElementById('copy-btn').addEventListener('click', () => navigator.clipboard.writeText(dataOut));
+  const dataIn1 = document.getElementById('data-in-1');
+  const dataIn2 = document.getElementById('data-in-2');
+  const result = document.getElementById('result');
+  
+  // Load data from localStorage if available
+  dataIn1.value = dataIn1.value || (localStorage.getItem('dataIn1') || '');
+  dataIn2.value = dataIn2.value || (localStorage.getItem('dataIn2') || '');
+    
+  // Save data to localStorage on input change
+  dataIn1.addEventListener('input', ev => localStorage.setItem('dataIn1', ev.target.value));
+  dataIn2.addEventListener('input', ev => localStorage.setItem('dataIn2', ev.target.value));
+  
+
+  function parseBS() {  // From Activo Bank to Ctbl    
+    dataOut = dataIn1.value
+      .split(`\n`)      // Deconstrut lines
+      .filter(v => v)   // Remove blank lines
+      .sort((a,b) => getBSDate(a) < getBSDate(b) ? -1: 1) // Order by date
+      .map(v => formatBS(v)) // Format it
+      .join(`\n`);      // Reconstruct string
+    console.log(dataOut);
+    navigator.clipboard.writeText(dataOut);
+    result.textContent = dataOut; // Display result in the pre element
+  }
+
+    function parseN26() { // From N26 download excel to Ctbl
+    dataOut = dataIn2.value
+      .split(`\n`)    // Deconstrut lines
+      .slice(1)       // Remove header line
+      .filter(v => v) // Remove blank lines
+      .sort((a,b) => getN26Date(a) < getN26Date(b) ? -1: 1) // Order by date
+      .map(v => formatN26(v)) // Format it
+      .join(`\n`);    // Reconstruct string
+    console.log(dataOut);
+    navigator.clipboard.writeText(dataOut);
+    result.textContent = dataOut; // Display result in the pre element
+  }
+
+  function parseAll() {
+    const arr = [
+      ...dataIn1.value  // BS data
+      .split(`\n`)      // Deconstrut lines
+      .filter(v => v)   // Remove blank lines
+      .map(v => {       // Format it
+        return { date: getBSDate(v), line: formatBS(v) };
+      }),
+      ...dataIn2.value  // N26 data
+      .split(`\n`)      // Deconstrut lines
+      .slice(1)         // Remove header line
+      .filter(v => v)   // Remove blank lines
+      .map(v => {       // Format it
+        const f = v.split(`\t`);
+        return { date: getN26Date(v), line: formatN26(v) };
+      })
+    ];
+    dataOut = arr
+      .sort((a,b) => a.date < b.date ? -1: 1) // Order by date
+      .map(v => v.line)
+      .join(`\n`); // Reconstruct string
+    console.log(arr);
+    console.log(dataOut);
+    navigator.clipboard.writeText(dataOut);
+    result.textContent = dataOut; // Display result in the pre element
+  }
+
+  function formatBS(v) {
+    const f = v.split(`\t`); 
+    return `${f[0]}\t${f[1]}\t\t${f[3].replaceAll('.', '').replace(',', '.')}\t\t5. BS` 
+  }
+  function formatN26(v) {
+    const f = v.split(`\t`); 
+    const [y,m,d] = f[0].split('-');
+    const eDate = `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y.padStart(4, '0')}`
+    return `${eDate}\t${f[2] || f[5]}\t\t${f[7]}\t\t6. N26` 
+  }
+
+  function getBSDate(v) {
+    const sDate = v.split('\t')[0]
+    const [d,m,y] = sDate.split('/');
+    return new Date(`${y}-${m}-${d}`);
+  }
+  function getN26Date(v) {
+    return new Date(v.split(`\t`)[0]);
+  }
+
+  function clearData(from) {
+    if (from === 'dataIn1') { dataIn1.value = ''; } else { dataIn2.value = ''; }
+    localStorage.removeItem(from);
+  } 
+
+  function clearAll() {
+    dataIn1.value = '';
+    dataIn2.value = '';
+    dataOut.textContent = '';
+    localStorage.clear();
+  }
+
+</script>
+
+</body>
+</html>
